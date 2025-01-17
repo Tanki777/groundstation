@@ -1,9 +1,11 @@
 import sys
 import struct
+import time
 from PyQt6 import QtGui, QtCore
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QPushButton, QTextBrowser, QLineEdit, QLabel, QCheckBox, QFrame, QSizePolicy, QPlainTextEdit)
 import Model
 import Controller
+import Compass
 
 class TelecommandWindow(QWidget):
     #initialization. called when the object is created
@@ -161,7 +163,7 @@ class MainWindow(QWidget):
         #button which opens the telecommand window
         self.cmd_button = QPushButton("Telecommand\nSystem")
         self.cmd_button.setFont(QtGui.QFont("Courier New", 20))
-        self.cmd_button.adjustSize()
+        #self.cmd_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.cmd_button.clicked.connect(self.openTelecommand)
         
         #layout of TMTC section
@@ -179,12 +181,14 @@ class MainWindow(QWidget):
         #label for connection status
         self.connection_label = QLabel("not connected")
         self.connection_label.setFont(QtGui.QFont("Courier New", 14))
+        #self.connection_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
         self.connection_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.connection_label.setStyleSheet("background-color: red")
 
         #button to connect to satellite
         connection_button = QPushButton("connect")
         connection_button.setFont(QtGui.QFont("Courier New", 20))
+        #connection_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         connection_button.clicked.connect(self.onConnectionButtonClicked)
 
         #layout
@@ -192,11 +196,19 @@ class MainWindow(QWidget):
         connection_vbox.addWidget(self.connection_label)
         connection_vbox.addWidget(connection_button)
 
+        #---live orientation section---
+        #compass widget
+        self.compass = Compass.CompassWidget()
+
+        #layout
+        compass_vbox = QVBoxLayout()
+        compass_vbox.addWidget(self.compass)
+
         #---body container---
         self.hbox = QHBoxLayout()
         self.hbox.addLayout(self.vbox_TMTC, stretch=1)
         self.hbox.addLayout(connection_vbox, stretch=1)
-        self.hbox.addStretch(1)
+        self.hbox.addLayout(compass_vbox, stretch=1)
 
         #---parent level---
         #self.setWindowIcon(QtGui.QIcon("nasa.png"))
@@ -283,6 +295,7 @@ class TelemetryHandler():
             if topic in self.mainWindow.telemetryWindows:
                 message = "time: {} | tmprd: {} | attTime: {} | roll: {} | pitch: {} | yaw: {}".format(unpacked[0], unpacked[2], unpacked[3], unpacked[4], unpacked[5], unpacked[6])
                 self.mainWindow.telemetryWindows[topic].updateTelemetry(message)
+                self.mainWindow.compass.set_heading(unpacked[6]) #update compass widget
 
         except Exception as e:
             print(e)
@@ -380,9 +393,14 @@ class TelemetryHandler():
             print(data)
             print(len(data))
 
+
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     app.setFont(QtGui.QFont("Courier New"))
     window = MainWindow()
     window.showMaximized()
+    
     sys.exit(app.exec())
+
+
+
