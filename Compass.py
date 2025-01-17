@@ -1,7 +1,6 @@
-import sys
-from PyQt6.QtCore import Qt, QPointF, QTimer
+from PyQt6.QtCore import Qt, QPointF
 from PyQt6.QtGui import QPainter, QPen, QColor, QFont
-from PyQt6.QtWidgets import QApplication, QWidget
+from PyQt6.QtWidgets import QWidget
 from math import sin, cos, radians
 
 
@@ -11,11 +10,6 @@ class CompassWidget(QWidget):
         self.heading = 0  # Default heading angle in degrees
         self.setMinimumSize(300, 300)
 
-        # Set up a timer to rotate the compass needle
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.rotate_needle)
-        self.timer.start(1000)  # 1000 ms = 1 second
-
     def set_heading(self, angle):
         """
         Set the heading angle for the compass.
@@ -23,10 +17,6 @@ class CompassWidget(QWidget):
         """
         self.heading = angle % 360  # Ensure the angle is within 0-360
         self.update()
-
-    def rotate_needle(self):
-        """Rotate the needle by 10 degrees."""
-        self.set_heading(self.heading + 10)
 
     def paintEvent(self, event):
         painter = QPainter(self)
