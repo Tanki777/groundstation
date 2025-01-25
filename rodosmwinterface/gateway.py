@@ -34,7 +34,7 @@ class Gateway():
             self.analyseAndDistributeMessagesFromNetwork(msg)
         except Exception as e:
             # print("exception:", e)
-            # print ("error in pollMessage")
+            print ("error in pollMessage")
             pass
 
     def prepareMessage(self):

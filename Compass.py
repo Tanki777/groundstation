@@ -10,7 +10,7 @@ class CompassWidget(QWidget):
         self.heading = 0  # Default heading angle in degrees
         self.setMinimumSize(300, 300)
 
-    def set_heading(self, angle):
+    def set_heading(self, angle: float):
         """
         Set the heading angle for the compass.
         :param angle: Heading angle in degrees (0 to 360)

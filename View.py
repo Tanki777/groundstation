@@ -6,10 +6,13 @@ from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QC
 import Model
 import Controller
 import Compass
+import subprocess
+import faulthandler
+faulthandler.enable()
 
 class TelecommandWindow(QWidget):
     #initialization. called when the object is created
-    def __init__(self):
+    def __init__(self, dataModel):
         super().__init__()
 
         self.title = "Telecommand"
@@ -17,6 +20,7 @@ class TelecommandWindow(QWidget):
         self.left = 100
         self.width = 300
         self.height = 250
+        self.dataModel = dataModel
 
         self.InitWindow()
 
@@ -32,7 +36,7 @@ class TelecommandWindow(QWidget):
         #combobox to select a telecommand
         self.tc_comboBox = QComboBox()
 
-        for tc in Model.dataModel.telecommands:
+        for tc in self.dataModel.telecommands:
             self.tc_comboBox.addItem(tc)
 
         #container for telecommand label and combobox
@@ -120,17 +124,17 @@ class TelemetryWindow(QWidget):
 
         self.log_textfield = QPlainTextEdit()
         self.log_textfield.setReadOnly(True)
-        self.log_textfield.setMaximumBlockCount(2000) #what is this for?
+        #self.log_textfield.setMaximumBlockCount(2000) #what is this for?
         
         layout = QVBoxLayout()
         layout.addWidget(self.log_textfield)
 
         self.setLayout(layout)
 
-    def updateTelemetry(self, message):
-        self.log_textfield.insertPlainText(message) #add message
-        self.log_textfield.verticalScrollBar().setValue(self.log_textfield.verticalScrollBar().maximum()) #auto scroll
-        self.log_textfield.update() #update
+    def updateTelemetry(self, message: str):
+        self.log_textfield.appendPlainText(message) #add message
+        #self.log_textfield.verticalScrollBar().setValue(self.log_textfield.verticalScrollBar().maximum()) #auto scroll
+        #self.log_textfield.update() #update
     
     def closeEvent(self, a0):
         self.onCloseCallback(self.title)
@@ -142,18 +146,32 @@ class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
 
+        self.controller = Controller.Controller()
+        self.dataModel = Model.DataModel()
+
         self.title = "Ground Station"
         self.top = 100
         self.left = 100
         self.width = 300
         self.height = 250
 
-        self.cmd_window = TelecommandWindow()
+        self.cmd_window = TelecommandWindow(self.dataModel)
         #self.tmAD_window = TelemetryWindow("Attitude Determination", self.onTelemetryWindowClosed)
 
         #stores widgets
         self.telemetryWindows = {}
         self.telemetryCheckBoxes = {}
+
+        #stores signals
+        self.telemetrySignals = {}
+        self.telemetrySignals["Attitude Control"] = self.controller.tmAC
+        self.telemetrySignals["Attitude Determination"] = self.controller.tmAD
+        self.telemetrySignals["IMU"] = self.controller.tmIMU
+        self.telemetrySignals["Light Sensor"] = self.controller.tmLS
+        self.telemetrySignals["Magnetic Torquer"] = self.controller.tmMT
+        self.telemetrySignals["Payload"] = self.controller.tmPL
+        self.telemetrySignals["Power"] = self.controller.tmPW
+        self.telemetrySignals["Reaction Wheel"] = self.controller.tmRW
 
         self.InitWindow()
 
@@ -170,7 +188,7 @@ class MainWindow(QWidget):
         self.vbox_TMTC = QVBoxLayout()
         self.vbox_TMTC.addWidget(self.cmd_button)
 
-        for topic in Model.dataModel.telemetryWindows:
+        for topic in self.dataModel.telemetryWindows:
             checkBox = QCheckBox(topic)
             checkBox.setFont(QtGui.QFont("Courier New", 14))
             checkBox.toggled.connect(lambda checked, _topic = topic: self.toggleTelemetry(checked, _topic)) #connect toggle behavior
@@ -199,6 +217,7 @@ class MainWindow(QWidget):
         #---live orientation section---
         #compass widget
         self.compass = Compass.CompassWidget()
+        self.controller.tmHeading.connect(self.compass.set_heading)
 
         #layout
         compass_vbox = QVBoxLayout()
@@ -248,6 +267,7 @@ class MainWindow(QWidget):
         if checked:
             if topic not in self.telemetryWindows:
                 telemetryWindow = TelemetryWindow(topic, self.onTelemetryWindowClosed)
+                self.telemetrySignals[topic].connect(telemetryWindow.updateTelemetry)
                 self.telemetryWindows[topic] = telemetryWindow
             telemetryWindow.show()
 
@@ -262,142 +282,22 @@ class MainWindow(QWidget):
         
     def onConnectionButtonClicked(self):
         try:
-            Controller.controller.connectSatellite()
+            self.controller.run()
             self.connection_label.setText("connected")
             self.connection_label.setStyleSheet("background-color: green")
 
         except Exception as e:
             print(e)
         
-class TelemetryHandler():
-    def __init__(self):
-        self.mainWindow = window
-
-    #handler for AttitudeControl
-    def topicHandlerAC_TM(self, data):
-        topic = "Attitude Control"
-        try:
-            unpacked = struct.unpack("d?QQdd", data)
-            if topic in self.mainWindow.telemetryWindows:
-                message = "time: {} | tmprd: {} | ctrprd: {} | yr: {} | ydr: {}".format(unpacked[0], unpacked[2], unpacked[3], unpacked[4], unpacked[5])
-                self.mainWindow.telemetryWindows[topic].updateTelemetry(message)
-            
-        except Exception as e:
-            print(e)
-            print(data)
-            print(len(data))
-
-    #handler for AttitudeDetermination
-    def topicHandlerAD_TM(self, data):
-        topic = "Attitude Determination"
-        try:
-            unpacked = struct.unpack("d?Qdddd", data)
-            if topic in self.mainWindow.telemetryWindows:
-                message = "time: {} | tmprd: {} | attTime: {} | roll: {} | pitch: {} | yaw: {}".format(unpacked[0], unpacked[2], unpacked[3], unpacked[4], unpacked[5], unpacked[6])
-                self.mainWindow.telemetryWindows[topic].updateTelemetry(message)
-                self.mainWindow.compass.set_heading(unpacked[6]) #update compass widget
-
-        except Exception as e:
-            print(e)
-            print(data)
-            print(len(data)) 
-
-    #handler for IMU
-    def topicHandlerIMU_TM(self, data):
-        topic = "IMU"
-        try:
-            unpacked = struct.unpack("d?QQddddddddddd", data)
-            if topic in self.mainWindow.telemetryWindows:
-                message = ("TIM={} | TMPRD={} | SNSPRD={} | SNSTIM={} | AX={} | AY={} | AZ={} | GX={} | GY={} | GZ={} | MX={} | MY={} | MZ={} | TEMP={} "
-                           .format(unpacked[0], unpacked[2], unpacked[3], unpacked[4], unpacked[5], unpacked[6], unpacked[7], unpacked[8], unpacked[9]
-                                   , unpacked[10], unpacked[11], unpacked[12], unpacked[13], unpacked[14]))
-                self.mainWindow.telemetryWindows[topic].updateTelemetry(message)
-            
-        except Exception as e:
-            print(e)
-            print(data)
-            print(len(data))
-
-    #handler for LightSensor
-    def topicHandlerLS_TM(self, data):
-        topic = "Light Sensor"
-        try:
-            unpacked = struct.unpack("d?QQd", data) #TODO: adjust, waiting for stm code
-            if topic in self.mainWindow.telemetryWindows:
-                message = ("TIM={} | TMPRD={} | SNSPRD={} | SNSTIM={}"
-                           .format(unpacked[0], unpacked[2], unpacked[3], unpacked[4])) #TODO: adjust, waiting for stm code
-                self.mainWindow.telemetryWindows[topic].updateTelemetry(message)
-            
-        except Exception as e:
-            print(e)
-            print(data)
-            print(len(data))
-
-    #handler for MagneticTorquer
-    def topicHandlerMT_TM(self, data):
-        topic = "Magnetic Torquer"
-        try:
-            unpacked = struct.unpack("d?Qd", data)
-            if topic in self.mainWindow.telemetryWindows:
-                message = ("TIM={} | TMPRD={} | IREF={}"
-                           .format(unpacked[0], unpacked[2], unpacked[3]))
-                self.mainWindow.telemetryWindows[topic].updateTelemetry(message)
-            
-        except Exception as e:
-            print(e)
-            print(data)
-            print(len(data))
-
-    #handler for Payload
-    def topicHandlerPL_TM(self, data):
-        topic = "Payload"
-        try:
-            unpacked = struct.unpack("d?Q", data) #TODO: adjust, waiting for stm code
-            if topic in self.mainWindow.telemetryWindows:
-                message = ("TIM={} | TMPRD={}"
-                           .format(unpacked[0], unpacked[2])) #TODO: adjust, waiting for stm code
-                self.mainWindow.telemetryWindows[topic].updateTelemetry(message)
-            
-        except Exception as e:
-            print(e)
-            print(data)
-            print(len(data))
-
-    #handler for Power
-    def topicHandlerPW_TM(self, data):
-        topic = "Power"
-        try:
-            unpacked = struct.unpack("d?QQdddddddd", data)
-            if topic in self.mainWindow.telemetryWindows:
-                message = ("TIM={} | TMPRD={} | SNSPRD={} | SNSTIM={} | BATV={} | BATI={} | BATPCT={} | SPLV={} | SPLI={} | SPRV={} | SPRI={}"
-                           .format(unpacked[0], unpacked[2], unpacked[3], unpacked[4], unpacked[5]))
-                self.mainWindow.telemetryWindows[topic].updateTelemetry(message)
-            
-        except Exception as e:
-            print(e)
-            print(data)
-            print(len(data))
-
-    #handler for ReactionWheel
-    def topicHandlerRW_TM(self, data):
-        topic = "Reaction Wheel"
-        try:
-            unpacked = struct.unpack("d?QQddf", data)
-            if topic in self.mainWindow.telemetryWindows:
-                message = ("TIM={} | TMPRD={} | SNSPRD={} | SNSTIM={} | SPD={} | SPDREF={}"
-                           .format(unpacked[0], unpacked[2], unpacked[3], unpacked[4], unpacked[5]))
-                self.mainWindow.telemetryWindows[topic].updateTelemetry(message)
-            
-        except Exception as e:
-            print(e)
-            print(data)
-            print(len(data))
-
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     app.setFont(QtGui.QFont("Courier New"))
+
     window = MainWindow()
+
+    #telemetryHandler = TelemetryHandler(window)
+    
     window.showMaximized()
     
     sys.exit(app.exec())

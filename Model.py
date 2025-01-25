@@ -17,6 +17,3 @@ class DataModel():
             "Reaction Wheel"
         ]
 
-    
-
-dataModel = DataModel()
