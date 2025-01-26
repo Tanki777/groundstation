@@ -1,9 +1,13 @@
 import sys
 import struct
+import socket
+import io
+from PIL import Image
 
 sys.path.insert(1,'rodos/support/support-programs/middleware-python')
 import rodosmwinterface as rodos
 from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtGui import QImage
 #rodos.printTopicInit(enable=True)
 
 class Controller(QThread):
@@ -18,7 +22,7 @@ class Controller(QThread):
     tmPW = pyqtSignal(str)
     tmRW = pyqtSignal(str)
 
-    
+    payloadData = pyqtSignal(QImage)
 
     #handler for AttitudeControl
     def topicHandlerAC_TM(self, data):
@@ -135,7 +139,8 @@ class Controller(QThread):
             print(data)
             print(len(data))
 
-    def run(self):
+    
+    def connectStm(self):
         #telecommand topics
         self.telecommandTopic = rodos.Topic(2000) #telecommand
 
@@ -150,6 +155,7 @@ class Controller(QThread):
         rwTopic = rodos.Topic(3008) #ReactionWheel
         #thTopic = rodos.Topic(3009) #Thermal ditched
 
+        #bluetooth connection to stm board
         luart = rodos.LinkinterfaceUART(path="/dev/rfcomm0")
         gwUart = rodos.Gateway(luart)
         gwUart.run()
@@ -165,6 +171,60 @@ class Controller(QThread):
         gwUart.forwardTopic(self.telecommandTopic)
         print("DEBUG: connected!\n")
 
+    def connectPi(self):
+        host = "192.168.4.1" #TODO: adjust
+        port = 5000 #TODO: adjust
+        
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+            server_socket.bind((host, port))
+            server_socket.listen(1)
+            print(f"Listening for connections on {host}:{port}...")
+
+            client_socket, addr = server_socket.accept()
+            print(f"Connection established with {addr}")
+
+            while self.running:
+                try:
+                    # Receive the image size (4 bytes)
+                    size_data = client_socket.recv(4)
+                    if not size_data:
+                        break
+
+                    # Convert size_data to integer
+                    img_size = struct.unpack('>I', size_data)[0]
+
+                    # Receive the image data
+                    img_data = b''
+                    while len(img_data) < img_size:
+                        packet = client_socket.recv(img_size - len(img_data))
+                        if not packet:
+                            break
+                        img_data += packet
+
+                    # Convert the image data to QImage
+                    image = Image.open(io.BytesIO(img_data))
+                    qimage = QImage(image.tobytes(), image.width, image.height, QImage.Format.Format_RGB888)
+                    self.payloadData.emit(qimage)
+
+                except Exception as e:
+                    print(f"Error: {e}")
+                    break
+
+            client_socket.close()
+
+    def stopPi(self):
+        self.running = False
+        #self.quit()
+        #self.wait()
+        
+
+    def run(self):
+        #connect to stm board
+        self.connectStm()
+        
+        #wifi connection to raspberry
+        self.running = True
+        self.connectPi()
 
 
   

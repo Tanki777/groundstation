@@ -2,7 +2,8 @@ import sys
 import struct
 import time
 from PyQt6 import QtGui, QtCore
-from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QPushButton, QTextBrowser, QLineEdit, QLabel, QCheckBox, QFrame, QSizePolicy, QPlainTextEdit)
+from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QPushButton, QTextBrowser, QLineEdit, QLabel
+                             , QCheckBox, QFrame, QSizePolicy, QPlainTextEdit, QScrollArea)
 import Model
 import Controller
 import Compass
@@ -160,6 +161,7 @@ class MainWindow(QWidget):
         super().__init__()
 
         self.controller = Controller.Controller()
+        #self.controller.start() #is this needed???
         self.dataModel = Model.DataModel()
 
         self.title = "Ground Station"
@@ -253,6 +255,22 @@ class MainWindow(QWidget):
         self.mission_label.setFont(QtGui.QFont("Courier New", 16))
         self.mission_label.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
 
+        #image section
+        #scroll area
+        self.imageScrollArea = QScrollArea()
+        self.imageScrollArea.setWidgetResizable(True)
+
+        #container for images
+        self.imageContainer = QWidget()
+        self.imageHbox = QHBoxLayout()
+        self.imageContainer.setLayout(self.imageHbox)
+
+        #add container to scroll area
+        self.imageScrollArea.setWidget(self.imageContainer)
+
+        #connect controller signal to handler
+        self.controller.payloadData.connect(self.addImage)
+
         #layout is a vbox
         frame1 = QFrame()
         frame1.setFrameShape(QFrame.Shape.HLine)
@@ -265,7 +283,8 @@ class MainWindow(QWidget):
         #frame2.setFrameShadow(QFrame.Shadow.Sunken)
         self.vbox.addWidget(frame2)
         self.vbox.addLayout(self.hbox)
-        self.vbox.addStretch(1)
+        self.vbox.addWidget(self.imageScrollArea)
+        #self.vbox.addStretch(1)
 
         self.setLayout(self.vbox) #set total layout for the main window
         
@@ -301,6 +320,21 @@ class MainWindow(QWidget):
 
         except Exception as e:
             print(e)
+
+    def addImage(self, qimage):
+        #convert QImage to QPixmap
+        pixmap = QtGui.QPixmap.fromImage(qimage)
+
+        #create image label
+        imageLabel = QLabel()
+        imageLabel.setPixmap(pixmap)
+        #imageLabel.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        imageLabel.setScaledContents(True) #scale to fit within label dimensions
+        imageLabel.setFixedSize(600, 400)
+        
+        #add image label to container
+        self.imageHbox.addWidget(imageLabel)
+        
         
 
 if __name__ == '__main__':
