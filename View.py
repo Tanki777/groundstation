@@ -12,7 +12,7 @@ faulthandler.enable()
 
 class TelecommandWindow(QWidget):
     #initialization. called when the object is created
-    def __init__(self, dataModel):
+    def __init__(self, _mainWindow):
         super().__init__()
 
         self.title = "Telecommand"
@@ -20,7 +20,7 @@ class TelecommandWindow(QWidget):
         self.left = 100
         self.width = 300
         self.height = 250
-        self.dataModel = dataModel
+        self.mainWindow = _mainWindow
 
         self.InitWindow()
 
@@ -35,9 +35,11 @@ class TelecommandWindow(QWidget):
 
         #combobox to select a telecommand
         self.tc_comboBox = QComboBox()
+        #magically limits the max visible items to 10
+        self.tc_comboBox.setStyleSheet("combobox-popup: 0;")
 
-        for tc in self.dataModel.telecommands:
-            self.tc_comboBox.addItem(tc)
+        for tc in self.mainWindow.dataModel.telecommands:
+            self.tc_comboBox.addItem("{} | {}".format(tc.word, tc.description))
 
         #container for telecommand label and combobox
         self.upperLeft_vbox = QVBoxLayout()
@@ -52,7 +54,7 @@ class TelecommandWindow(QWidget):
         self.param_lineEdit = QLineEdit()
 
         #button for sending the telecommand
-        self.sendTc_button = QPushButton()
+        self.sendTc_button = QPushButton("SEND")
         self.sendTc_button.clicked.connect(self.sendTelecommand)
 
         #container for parameter label, input field and send telecommand button
@@ -102,8 +104,19 @@ class TelecommandWindow(QWidget):
 
         #send the telecommand
     def sendTelecommand(self):
-        #TODO
-        print("DEBUG: sent tc: {}\n".format(self.tc_comboBox.currentText()))
+        hour = time.localtime().tm_hour
+        min = time.localtime().tm_min
+        sec = time.localtime().tm_sec
+        sentTC = self.mainWindow.dataModel.telecommands[self.tc_comboBox.currentIndex()] #gets the corresponding telecommand via index
+        parameter = self.param_lineEdit.text()
+        if parameter == "": parameter = "0"
+
+        #add to telecommand log
+        self.tcLog_textBrowser.append("{}:{}:{} | {} | {}".format(hour, min, sec, sentTC.word, parameter))
+        
+        #send telecommand to satellite
+        telecommand = struct.pack("HQHd",sentTC.id,0,0,float(parameter))
+        self.mainWindow.controller.telecommandTopic.publish(telecommand)
 
 class TelemetryWindow(QWidget):
     #initialization. called when the object is created
@@ -155,7 +168,7 @@ class MainWindow(QWidget):
         self.width = 300
         self.height = 250
 
-        self.cmd_window = TelecommandWindow(self.dataModel)
+        self.cmd_window = TelecommandWindow(self)
         #self.tmAD_window = TelemetryWindow("Attitude Determination", self.onTelemetryWindowClosed)
 
         #stores widgets

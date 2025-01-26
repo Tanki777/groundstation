@@ -137,7 +137,7 @@ class Controller(QThread):
 
     def run(self):
         #telecommand topics
-        telecommandTopic = rodos.Topic(2000) #telecommand
+        self.telecommandTopic = rodos.Topic(2000) #telecommand
 
         #telemetry topics
         acTopic = rodos.Topic(3001) #AttitudeControl
@@ -162,7 +162,7 @@ class Controller(QThread):
         plTopic.addSubscriber(self.topicHandlerPL_TM)
         pwTopic.addSubscriber(self.topicHandlerPW_TM)
         rwTopic.addSubscriber(self.topicHandlerRW_TM)
-        gwUart.forwardTopic(telecommandTopic)
+        gwUart.forwardTopic(self.telecommandTopic)
         print("DEBUG: connected!\n")
 
 
