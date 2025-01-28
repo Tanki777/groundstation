@@ -265,6 +265,11 @@ class MainWindow(QWidget):
         self.imageHbox = QHBoxLayout()
         self.imageContainer.setLayout(self.imageHbox)
 
+        #test
+        self.testImage = QLabel("waiting for image...")
+        self.testImage.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.testImage.setFixedSize(600, 400)
+
         #add container to scroll area
         self.imageScrollArea.setWidget(self.imageContainer)
 
@@ -283,7 +288,8 @@ class MainWindow(QWidget):
         #frame2.setFrameShadow(QFrame.Shadow.Sunken)
         self.vbox.addWidget(frame2)
         self.vbox.addLayout(self.hbox)
-        self.vbox.addWidget(self.imageScrollArea)
+        self.vbox.addWidget(self.testImage)
+        #self.vbox.addWidget(self.imageScrollArea)
         #self.vbox.addStretch(1)
 
         self.setLayout(self.vbox) #set total layout for the main window
@@ -320,20 +326,29 @@ class MainWindow(QWidget):
 
         except Exception as e:
             print(e)
-
+    
     def addImage(self, qimage):
+        q_image = qimage.copy()
+        print("addImage...\n")
         #convert QImage to QPixmap
-        pixmap = QtGui.QPixmap.fromImage(qimage)
+        pixmap = QtGui.QPixmap.fromImage(q_image)
+        print("pixmap...\n")
+
+        #test
+        self.testImage.setPixmap(pixmap)
+        #self.testImage.setScaledContents(True)
+        #self.testImage.setFixedSize(600, 400)
 
         #create image label
-        imageLabel = QLabel()
-        imageLabel.setPixmap(pixmap)
+        #imageLabel = QLabel()
+        #imageLabel.setPixmap(pixmap)
         #imageLabel.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        imageLabel.setScaledContents(True) #scale to fit within label dimensions
-        imageLabel.setFixedSize(600, 400)
+        #imageLabel.setScaledContents(True) #scale to fit within label dimensions
+        #imageLabel.setFixedSize(600, 400)
         
         #add image label to container
-        self.imageHbox.addWidget(imageLabel)
+        #self.imageHbox.addWidget(imageLabel)
+        print("image added...\n")
         
         
 

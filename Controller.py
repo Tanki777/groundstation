@@ -29,7 +29,7 @@ class Controller(QThread):
         try:
             #print("DEBUG: trying to handle AC_TM\n")
             unpacked = struct.unpack("d?QQdd", data)
-            message = "time: {} | tmprd: {} | ctrprd: {} | yr: {} | ydr: {}\n".format(unpacked[0], unpacked[2], unpacked[3], unpacked[4], unpacked[5])
+            message = "time: {} | tmprd: {} | ctrprd: {} | yr: {} | ydr: {}".format(unpacked[0], unpacked[2], unpacked[3], unpacked[4], unpacked[5])
             self.tmAC.emit(message)
 
         except Exception as e:
@@ -43,7 +43,7 @@ class Controller(QThread):
         try:
             #print("DEBUG: trying to handle AC_TM\n")
             unpacked = struct.unpack("d?Qdddd", data)
-            message = "time: {} | tmprd: {} | attTime: {} | roll: {} | pitch: {} | yaw: {}\n".format(unpacked[0], unpacked[2], unpacked[3], unpacked[4], unpacked[5], unpacked[6])
+            message = "time: {} | tmprd: {} | attTime: {} | roll: {} | pitch: {} | yaw: {}".format(unpacked[0], unpacked[2], unpacked[3], unpacked[4], unpacked[5], unpacked[6])
             self.tmAD.emit(message)  
             self.tmHeading.emit(unpacked[6])
 
@@ -175,15 +175,18 @@ class Controller(QThread):
         host = "192.168.4.1" #TODO: adjust
         port = 5000 #TODO: adjust
         
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-            server_socket.bind((host, port))
-            server_socket.listen(1)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+            client_socket.connect((host, port))
+            #server_socket.listen(1)
             print(f"Listening for connections on {host}:{port}...")
 
-            client_socket, addr = server_socket.accept()
-            print(f"Connection established with {addr}")
+            #client_socket, addr = server_socket.accept()
+            print(f"Connection established with {host}")
+
+            i = 0
 
             while self.running:
+                i = i + 1
                 try:
                     # Receive the image size (4 bytes)
                     size_data = client_socket.recv(4)
@@ -191,7 +194,7 @@ class Controller(QThread):
                         break
 
                     # Convert size_data to integer
-                    img_size = struct.unpack('>I', size_data)[0]
+                    img_size = struct.unpack('<L', size_data)[0]
 
                     # Receive the image data
                     img_data = b''
@@ -202,9 +205,14 @@ class Controller(QThread):
                         img_data += packet
 
                     # Convert the image data to QImage
+                    print("converting...\n")
                     image = Image.open(io.BytesIO(img_data))
+                    print("image...\n")
                     qimage = QImage(image.tobytes(), image.width, image.height, QImage.Format.Format_RGB888)
+                    print("QImage...\n")
                     self.payloadData.emit(qimage)
+
+                    qimage.save("testImage{}".format(i),"JPEG")
 
                 except Exception as e:
                     print(f"Error: {e}")
