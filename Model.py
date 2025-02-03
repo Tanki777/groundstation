@@ -6,6 +6,105 @@ class Telecommand():
     id: hex
     description: str
 
+@dataclass
+class Telemetry():
+    topic: str
+    format: str
+
+@dataclass
+class Plot():
+    topic: str
+    title: str
+    y_label: str
+    legend: str
+
+@dataclass
+class PlotDataAC():
+    yaw_target: float
+    yaw_filtered: float
+    yaw_speed_target: float
+    yaw_speed_filtered: float
+    pos_ctrl_out: float
+    pos_ctrl_p: float
+    pos_ctrl_i: float
+    pos_ctrl_d: float
+    spd_ctrl_out: float
+    spd_ctrl_p: float
+    spd_ctrl_i: float
+    spd_ctrl_d: float
+
+    def __getitem__(self, index):
+        return (self.yaw_target, self.yaw_filtered, self.yaw_speed_target, self.yaw_speed_filtered, self.pos_ctrl_out, self.pos_ctrl_p, self.pos_ctrl_i, self.pos_ctrl_d
+                , self.spd_ctrl_out, self.spd_ctrl_p, self.spd_ctrl_i, self.spd_ctrl_d)[index]
+
+@dataclass
+class PlotDataAD():
+    roll_measured: float
+    roll_filtered: float
+    pitch_measured: float
+    pitch_filtered: float
+    yaw_measured: float
+    yaw_filtered: float
+    yawSpeed_measured: float
+    yawSpeed_filtered: float
+    
+
+    def __getitem__(self, index):  #enables indexing
+        return (self.roll_measured, self.roll_filtered, self.pitch_measured, self.pitch_filtered, self.yaw_measured, self.yaw_filtered, self.yawSpeed_measured
+                , self.yawSpeed_filtered)[index]
+
+@dataclass
+class PlotDataIMU():
+    ax: float
+    ay: float
+    az: float
+    gx: float
+    gy: float
+    gz: float
+    mx: float
+    my: float
+    mz: float
+
+    def __getitem__(self, index):
+        return (self.ax, self.ay, self.az, self.gx, self.gy, self.gz, self.mx, self.my, self.mz)[index]
+
+@dataclass
+class PlotDataLS():
+    lux: float
+
+    def __getitem__(self, index):
+        return (self.lux)[index]
+
+@dataclass
+class PlotDataMT():
+    pwm_torquer1: float
+    pwm_torquer2: float
+
+    def __getitem__(self, index):
+        return (self.pwm_torquer1, self.pwm_torquer2)[index]
+
+@dataclass
+class PlotDataPL():
+    x: float
+    #TODO
+
+@dataclass
+class PlotDataPW():
+    x: float
+    #TODO
+
+@dataclass
+class PlotDataRW():
+    speed_target: float
+    speed_filtered: float
+    spd_ctrl_out: float
+    spd_ctrl_p: float
+    spd_ctrl_i: float
+    spd_ctrl_d: float
+
+    def __getitem__(self, index):
+        return (self.speed_target, self.speed_filtered, self.spd_ctrl_out, self.spd_ctrl_p, self.spd_ctrl_i, self.spd_ctrl_d)[index]
+
 class DataModel():
     def __init__(self):
         self.telecommands = [
@@ -23,6 +122,7 @@ class DataModel():
             Telecommand("AC_YAWXXXX", 0x1003, "set desired yaw angle [deg]"),
             Telecommand("AC_YAWSPDX", 0x1004, "set desired yaw angular speed [deg/s]"),
             Telecommand("AC_CTRLPRD", 0x1005, "set period of the attitude controller [ms]"),
+            Telecommand("AC_MODEXXX", 0x1006, "set control mode (RW = 0, RWMT = 1, MT = 2)"),
 
             #---Attitude Determination---#
             Telecommand("AD_APP_ONX", 0x2000, "turn on application attitude determination"),
@@ -80,16 +180,70 @@ class DataModel():
             Telecommand("TTC_TM_PRD", 0xA002, "set period of the telemetry thread [ms]")
             ]
 
-        self.telemetryWindows = [
-            "Attitude Control",
-            "Attitude Determination",
-            "IMU",
-            "Light Sensor",
-            "Magnetic Torquer",
-            "Payload",
-            "Power",
-            "Reaction Wheel"
+        self.telemetry = [
+            Telemetry("Attitude Control","  TIME  TMPRD CTRPRD  YAWREF  YAWSPDREF"),
+            Telemetry("Attitude Determination","  TIME    TMPRD   ROLL    PITCH      YAW"),
+            Telemetry("IMU","  TIME  TMPRD SNSPRD     AX      AY      AZ      GX       GY      GZ       MX      MY      MZ"),
+            Telemetry("Light Sensor","  TIME  TMPRD SNSPRD"),
+            Telemetry("Magnetic Torquer","  TIME  TMPRD IREF  TRQNR"),
+            Telemetry("Payload","  TIME  TMPRD"),
+            Telemetry("Power","  TIME   TMPRD  SNSPRD  BATV    BATI   BATPCT   SPLV   SPLI    SPRV   SPRI"),
+            Telemetry("Reaction Wheel","  TIME  TMPRD SNSPRD   SPD     SPDREF"),
+            Telemetry("Error Messages",""),
+            Telemetry("Debug","")
         ]
+
+        self.plots = [
+            Plot("Attitude Control","Position Controller System Response","Yaw [deg]","target"),
+            Plot("Attitude Control","Position Controller System Response","Yaw [deg]","filtered"),
+            Plot("Attitude Control","Speed Controller System Response","Yaw Speed [deg/s]","target"),
+            Plot("Attitude Control","Speed Controller System Response","Yaw Speed [deg/s]","filtered"),
+            Plot("Attitude Control","Position Controller Info","Speed [deg/s]","output"),
+            Plot("Attitude Control","Position Controller Info","Speed [deg/s]","p-term"),
+            Plot("Attitude Control","Position Controller Info","Speed [deg/s]","i-term"),
+            Plot("Attitude Control","Position Controller Info","Speed [deg/s]","d-term"),
+            Plot("Attitude Control","Speed Controller Info","Speed [RPM]","output"),
+            Plot("Attitude Control","Speed Controller Info","Speed [RPM]","p-term"),
+            Plot("Attitude Control","Speed Controller Info","Speed [RPM]","i-term"),
+            Plot("Attitude Control","Speed Controller Info","Speed [RPM]","d-term"),
+
+            Plot("Attitude Determination","Roll","[deg]","measured"),
+            Plot("Attitude Determination","Roll","[deg]","filtered"),
+            Plot("Attitude Determination","Pitch","[deg]","measured"),
+            Plot("Attitude Determination","Pitch","[deg]","filtered"),
+            Plot("Attitude Determination","Yaw","[deg]","measured"),
+            Plot("Attitude Determination","Yaw","[deg]","filtered"),
+            Plot("Attitude Determination","Yaw Speed","[deg/s]","measured"),
+            Plot("Attitude Determination","Yaw Speed","[deg/s]","filtered"),
+
+            Plot("IMU","Accelerometer","[g]","x"),
+            Plot("IMU","Accelerometer","[g]","y"),
+            Plot("IMU","Accelerometer","[g]","z"),
+            Plot("IMU","Gyroscope","[deg/s]","x"),
+            Plot("IMU","Gyroscope","[deg/s]","y"),
+            Plot("IMU","Gyroscope","[deg/s]","z"),
+            Plot("IMU","Magnetometer","[gauss]","x"),
+            Plot("IMU","Magnetometer","[gauss]","y"),
+            Plot("IMU","Magnetometer","[gauss]","z"),
+
+            Plot("Light Sensor","Lux","","measured"),
+
+            Plot("Magnetic Torquer","Torquer Actuation","PWM","torquer1"),
+            Plot("Magnetic Torquer","Torquer Actuation","PWM","torquer2"),
+
+            Plot("Payload","","",""),
+
+            Plot("Power","","",""),
+
+            Plot("Reaction Wheel","Speed Controller System Response","Speed [RPM]","target"),
+            Plot("Reaction Wheel","Speed Controller System Response","Speed [RPM]","filtered"),
+            Plot("Reaction Wheel","Speed Controller Info","PWM","output"),
+            Plot("Reaction Wheel","Speed Controller Info","PWM","p-term"),
+            Plot("Reaction Wheel","Speed Controller Info","PWM","i-term"),
+            Plot("Reaction Wheel","Speed Controller Info","PWM","d-term")
+        ]
+
+
 
         
 

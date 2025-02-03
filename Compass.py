@@ -15,7 +15,9 @@ class CompassWidget(QWidget):
         Set the heading angle for the compass.
         :param angle: Heading angle in degrees (0 to 360)
         """
-        self.heading = angle % 360  # Ensure the angle is within 0-360
+        #self.heading = angle % 360  # Ensure the angle is within 0-360
+        #self.heading = angle % 180  # Ensure the angle is within -180 - 180
+        self.heading = angle
         self.update()
 
     def paintEvent(self, event):
@@ -27,11 +29,11 @@ class CompassWidget(QWidget):
         radius = int(min(self.width(), self.height()) / 2 - 20)
 
         # Draw compass outer circle
-        painter.setPen(QPen(Qt.GlobalColor.black, 3))
+        painter.setPen(QPen(Qt.GlobalColor.white, 3))
         painter.drawEllipse(center, radius, radius)
 
         # Draw tick marks and degree labels
-        for i in range(0, 360, 5):  # Tick marks every 5 degrees
+        for i in range(-180, 180, 5):  # Tick marks every 5 degrees
             angle_rad = radians(i - 90)
             outer_x = center.x() + radius * cos(angle_rad)
             outer_y = center.y() + radius * sin(angle_rad)
@@ -48,13 +50,13 @@ class CompassWidget(QWidget):
                 inner_x = center.x() + (radius - 10) * cos(angle_rad)
                 inner_y = center.y() + (radius - 10) * sin(angle_rad)
 
-            painter.setPen(QPen(Qt.GlobalColor.black, 2))
+            painter.setPen(QPen(Qt.GlobalColor.white, 2))
             painter.drawLine(QPointF(outer_x, outer_y), QPointF(inner_x, inner_y))
 
         # Draw cardinal and intermediate direction labels
         directions = {
             'N': 0, 'NE': 45, 'E': 90, 'SE': 135,
-            'S': 180, 'SW': 225, 'W': 270, 'NW': 315
+            'S': 180, 'SW': -135, 'W': -90, 'NW': -45
         }
         for direction, angle in directions.items():
             angle_rad = radians(angle - 90)
@@ -83,7 +85,7 @@ class CompassWidget(QWidget):
         painter.drawPolygon(QPointF(tip_x, tip_y), QPointF(left_base_x, left_base_y), QPointF(right_base_x, right_base_y))
 
         # Draw a center circle
-        painter.setBrush(QColor("black"))
+        painter.setBrush(QColor("white"))
         painter.drawEllipse(center, 5, 5)
 
         painter.end()

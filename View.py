@@ -3,13 +3,20 @@ import struct
 import time
 from PyQt6 import QtGui, QtCore
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QPushButton, QTextBrowser, QLineEdit, QLabel
-                             , QCheckBox, QFrame, QSizePolicy, QPlainTextEdit, QScrollArea)
+                             , QCheckBox, QFrame, QSizePolicy, QPlainTextEdit, QScrollArea, QGridLayout)
+import pyqtgraph as pg
 import Model
 import Controller
 import Compass
 import subprocess
 import faulthandler
 faulthandler.enable()
+
+def getColorByIndex(index):
+    if index == 0: return "r" #red
+    if index == 1: return "b" #blue
+    if index == 2: return "g" #green?
+    if index == 3: return "y" #yellow?
 
 class TelecommandWindow(QWidget):
     #initialization. called when the object is created
@@ -121,38 +128,315 @@ class TelecommandWindow(QWidget):
 
 class TelemetryWindow(QWidget):
     #initialization. called when the object is created
-    def __init__(self, title, onCloseCallback):
+    def __init__(self, _mainWindow):
         super().__init__()
-        self.title = title
-        self.onCloseCallback = onCloseCallback
-        self.top = 100
-        self.left = 100
-        self.width = 300
-        self.height = 250
+        self.mainWindow = _mainWindow
+        #self.title = title
+        #self.onCloseCallback = onCloseCallback
+        #self.top = 0
+        #self.left = 0
+        #self.width = 1000
+        #self.height = 80
 
         self.InitWindow()
 
     def InitWindow(self):
-        self.setGeometry(self.left, self.top, self.width, self.height)
-        self.setWindowTitle(self.title)
+        #self.setGeometry(self.left, self.top, self.width, self.height)
+        #self.resize(1000, 80)
 
-        self.log_textfield = QPlainTextEdit()
-        self.log_textfield.setReadOnly(True)
+        #stores widgets
+        self.telemetryWidgets = {}
+        self.telemetryCheckBoxes = {}
+        self.tm_frames = {}
+        self.graphWidgets = {}
+        self.graph_frames = {}
+
+        #stores signals
+        self.telemetrySignals = {}
+        self.telemetrySignals["Attitude Control"] = self.mainWindow.controller.tmAC
+        self.telemetrySignals["Attitude Determination"] = self.mainWindow.controller.tmAD
+        self.telemetrySignals["IMU"] = self.mainWindow.controller.tmIMU
+        self.telemetrySignals["Light Sensor"] = self.mainWindow.controller.tmLS
+        self.telemetrySignals["Magnetic Torquer"] = self.mainWindow.controller.tmMT
+        self.telemetrySignals["Payload"] = self.mainWindow.controller.tmPL
+        self.telemetrySignals["Power"] = self.mainWindow.controller.tmPW
+        self.telemetrySignals["Reaction Wheel"] = self.mainWindow.controller.tmRW
+        self.telemetrySignals["Error Messages"] = self.mainWindow.controller.tmERR
+        self.telemetrySignals["Debug"] = self.mainWindow.controller.tmDebug
+
+        self.plotSignals = {}
+        self.plotSignals["Attitude Control"] = self.mainWindow.controller.plotAC
+        self.plotSignals["Attitude Determination"] = self.mainWindow.controller.plotAD
+        self.plotSignals["IMU"] = self.mainWindow.controller.plotIMU
+        self.plotSignals["Light Sensor"] = self.mainWindow.controller.plotLS
+        self.plotSignals["Magnetic Torquer"] = self.mainWindow.controller.plotMT
+        self.plotSignals["Payload"] = self.mainWindow.controller.plotPL
+        self.plotSignals["Power"] = self.mainWindow.controller.plotPW
+        self.plotSignals["Reaction Wheel"] = self.mainWindow.controller.plotRW
+
+        self.setWindowTitle("Telemetry")
+        self.setGeometry(0,0,0,900)
+
+        #selection section
+        self.selection_hbox1 = QHBoxLayout()
+        self.selection_hbox2 = QHBoxLayout()
+
+        i = 0
+        for tm in self.mainWindow.dataModel.telemetry:
+            checkBox = QCheckBox(tm.topic)
+            checkBox.setFont(QtGui.QFont("Courier New", 11))
+            checkBox.toggled.connect(lambda checked, _tm = tm: self.toggleTelemetry(checked, _tm)) #connect toggle behavior
+            self.telemetryCheckBoxes[tm.topic] = checkBox #store widget into dictionary
+
+            if i < 5:
+                self.selection_hbox1.addWidget(checkBox) #add widget to layout
+            else:
+                self.selection_hbox2.addWidget(checkBox) #add widget to layout
+            
+
+            i = i + 1
+
+        #parent layout
+        self.vbox = QVBoxLayout()
+        self.vbox.addLayout(self.selection_hbox1)
+        self.vbox.addLayout(self.selection_hbox2)
+        frame1 = QFrame()
+        frame1.setFrameShape(QFrame.Shape.HLine)
+        #frame1.setFrameShadow(QFrame.Shadow.Sunken)
+
+        #scroll area for telemetry
+        self.tm_scrollarea = QScrollArea()
+        self.tm_scrollarea.setWidgetResizable(True)
+        self.tm_scroll_vbox = QVBoxLayout()
+        
+        self.tm_container = QWidget()
+        self.tm_container.setLayout(self.tm_scroll_vbox)
+
+        self.tm_scrollarea.setWidget(self.tm_container)
+
+        #scroll area for graphs
+        self.graph_scrollarea = QScrollArea()
+        self.graph_scrollarea.setWidgetResizable(True)
+        self.graph_scroll_vbox = QVBoxLayout()
+
+        self.graph_container = QWidget()
+        self.graph_container.setLayout(self.graph_scroll_vbox)
+
+        self.graph_scrollarea.setWidget(self.graph_container)
+
+        self.scrollWrapper_hbox = QHBoxLayout()
+        self.scrollWrapper_hbox.addWidget(self.tm_scrollarea,3)
+        self.scrollWrapper_hbox.addWidget(self.graph_scrollarea,2)
+
+        self.vbox.addWidget(frame1)
+        self.vbox.addLayout(self.scrollWrapper_hbox)
+        #self.vbox.addStretch(1)
+
+        #self.log_textfield = QPlainTextEdit()
+        #self.log_textfield.setReadOnly(True)
         #self.log_textfield.setMaximumBlockCount(2000) #what is this for?
         
-        layout = QVBoxLayout()
-        layout.addWidget(self.log_textfield)
+        #layout = QVBoxLayout()
+        #layout.addWidget(self.log_textfield)
 
+        self.setLayout(self.vbox)
+
+    #opens/closes the telemetry window for the topic AttitudeDetermination
+    def toggleTelemetry(self, checked, tm):
+        if checked:
+            #---telemetry widget---#
+            tm_widget = TelemetryWidget(self.mainWindow.dataModel, tm)
+            self.telemetrySignals[tm.topic].connect(tm_widget.updateTelemetry)
+            self.telemetryWidgets[tm.topic] = tm_widget
+
+            frame1 = QFrame()
+            frame1.setFrameShape(QFrame.Shape.HLine)
+            #frame1.setFrameShadow(QFrame.Shadow.Sunken)
+            self.tm_frames[tm.topic] = frame1
+
+            #---graph widget---#
+            graph_widget = GraphWidget(self.mainWindow.dataModel,tm.topic)
+            self.graphWidgets[tm.topic] = graph_widget
+            #connect signal from controller
+            self.plotSignals[tm.topic].connect(graph_widget.updateData)
+            tm_widget.graph_button.clicked.connect(graph_widget.onGraphClicked)
+
+            frame2 = QFrame()
+            frame2.setFrameShape(QFrame.Shape.HLine)
+            self.graph_frames[tm.topic] = frame2
+                
+            self.tm_scroll_vbox.addWidget(tm_widget)
+            self.tm_scroll_vbox.addWidget(frame1)
+
+            self.graph_scroll_vbox.addWidget(graph_widget)
+            self.graph_scroll_vbox.addWidget(frame2)
+
+            
+        else:
+            self.tm_scroll_vbox.removeWidget(self.telemetryWidgets[tm.topic])
+            self.tm_scroll_vbox.removeWidget(self.tm_frames[tm.topic])  
+            del self.telemetryWidgets[tm.topic] #remove from the dictionary
+            del self.tm_frames[tm.topic]
+
+            self.graph_scroll_vbox.removeWidget(self.graphWidgets[tm.topic])
+            self.graph_scroll_vbox.removeWidget(self.graph_frames[tm.topic])
+            del self.graphWidgets[tm.topic]
+            del self.graph_frames[tm.topic]
+            #self.telemetryCheckBoxes[topic].setChecked(False)
+
+
+    
+class TelemetryWidget(QWidget):
+    def __init__(self, _dataModel, _tm):
+        super().__init__()
+        self.dataModel = _dataModel
+        self.telemetry = _tm
+        self.initWidget()
+
+    def initWidget(self):
+        #topic display
+        topic_label = QLabel(self.telemetry.topic)
+
+        #telemetry log
+        self.log_textfield = QPlainTextEdit()
+        self.log_textfield.setReadOnly(True)
+        self.log_textfield.setMaximumBlockCount(2000) #what is this for?
+
+        #telemetry label for siplaying names of variables
+        values_label = QLabel(self.telemetry.format)
+
+        #vertical layout
+        vbox = QVBoxLayout()
+        vbox.addWidget(topic_label)
+        vbox.addWidget(self.log_textfield)
+        vbox.addWidget(values_label)
+
+        #button for graph
+        self.graph_button = QPushButton("graph")
+        
+        #TODO: add behavior
+
+        
+
+        #parent layout
+        layout = QHBoxLayout()
+        layout.addLayout(vbox,5)
+        layout.addWidget(self.graph_button,1)
         self.setLayout(layout)
 
     def updateTelemetry(self, message: str):
         self.log_textfield.appendPlainText(message) #add message
         #self.log_textfield.verticalScrollBar().setValue(self.log_textfield.verticalScrollBar().maximum()) #auto scroll
         #self.log_textfield.update() #update
-    
-    def closeEvent(self, a0):
-        self.onCloseCallback(self.title)
-        return super().closeEvent(a0)
+
+class NoScrollZoomPlotWidget(pg.PlotWidget):
+        def __init__(self):
+            super().__init__()
+
+        def wheelEvent(self, event):
+            self.parentWidget().wheelEvent(event)
+
+class GraphWidget(QWidget):
+    def __init__(self, _dataModel, _topic):
+        super().__init__()
+        self.dataModel = _dataModel
+        self.topic = _topic
+        self.initWidget()
+
+    def initWidget(self):
+        #parent layout
+        self.vbox = QVBoxLayout()
+
+        topic_label = QLabel(self.topic)
+        self.vbox.addWidget(topic_label)
+
+        self.figureCount = 0
+        self.dataCount = []
+        self.plotDataItems = []
+
+        #dictionary to store figures by title
+        figure = {}
+
+        self.x_data = list(range(100))
+        self.y_data_inner = [0] * 100
+        self.y_data_outer = []
+
+        for plot in self.dataModel.plots:
+
+            #only plot the corresponding topic
+            if plot.topic is self.topic:
+
+                #if the figure for a topic was not created yet, create one
+                if plot.title not in figure:
+                    plot_widget = NoScrollZoomPlotWidget()
+                    plot_item = plot_widget.plotItem
+                    plot_widget.setFixedHeight(150)
+
+                    self.y_data_outer.append(self.y_data_inner.copy())
+                    
+                    plot_item.addLegend(offset=(1,1))
+                    plot_data_item = plot_item.plot(self.x_data, self.y_data_inner, pen=getColorByIndex(0),name=plot.legend)
+                    plot_item.setTitle(plot.title)
+                    #plot_item.setLabel("bottom","time [s]")
+                    plot_item.setLabel("left",plot.y_label)
+                    
+                    #plot_widget.addItem(plot_item)
+
+                    self.plotDataItems.append(plot_data_item)
+
+                    #add figure to dictionary
+                    figure[plot.title] = plot_item
+
+                    #add plot widget to the layout
+                    self.vbox.addWidget(plot_widget)
+
+                    self.figureCount = self.figureCount + 1
+                    self.dataCount.append(1)
+
+                #if the figure for a topic is already created, add the plot to the existing figure
+                else:
+                    plot_data_item = figure[plot.title].plot(self.x_data, self.y_data_inner, pen=getColorByIndex(self.dataCount[self.figureCount-1]),name=plot.legend)
+                    self.dataCount[self.figureCount - 1] = self.dataCount[self.figureCount - 1] + 1
+                    self.plotDataItems.append(plot_data_item)
+
+                    self.y_data_outer.append(self.y_data_inner.copy())
+
+        self.setLayout(self.vbox)
+
+        self.hide()
+
+    def onGraphClicked(self):
+        if(self.isHidden()):
+            self.show()
+
+        else:
+            self.hide()
+
+    def updateData(self, data):
+        dataIndex = 0
+
+
+
+        
+        for i in range(self.vbox.count() - 1):
+            #print("DEBUG: i {}".format(i))
+            item = self.vbox.itemAt(i + 1)
+            widget = item.widget()
+
+            for k in range(self.dataCount[i]):
+                #print("DEBUG: k {}".format(k))
+                self.y_data_outer[dataIndex].pop(0)
+                #self.y_data.pop(0) #removes oldest value
+                #print("DEBUG: dataindex {}".format(dataIndex))
+                self.y_data_outer[dataIndex].append(data[dataIndex])
+                #self.y_data.append(data[dataIndex])
+                #print("DEBUG: yaw {}".format(data[4]))
+                self.plotDataItems[dataIndex].setData(self.x_data, self.y_data_outer[dataIndex])
+                dataIndex = dataIndex + 1
+                    
+
+
+        
     
 class MainWindow(QWidget):
 
@@ -161,6 +445,7 @@ class MainWindow(QWidget):
         super().__init__()
 
         self.controller = Controller.Controller()
+        
         #self.controller.start() #is this needed???
         self.dataModel = Model.DataModel()
 
@@ -170,25 +455,18 @@ class MainWindow(QWidget):
         self.width = 300
         self.height = 250
 
+        #self.setGeometry(self.left, self.top, self.width, self.height)
+
         self.cmd_window = TelecommandWindow(self)
+        self.tm_window = TelemetryWindow(self)
         #self.tmAD_window = TelemetryWindow("Attitude Determination", self.onTelemetryWindowClosed)
 
-        #stores widgets
-        self.telemetryWindows = {}
-        self.telemetryCheckBoxes = {}
+        
 
-        #stores signals
-        self.telemetrySignals = {}
-        self.telemetrySignals["Attitude Control"] = self.controller.tmAC
-        self.telemetrySignals["Attitude Determination"] = self.controller.tmAD
-        self.telemetrySignals["IMU"] = self.controller.tmIMU
-        self.telemetrySignals["Light Sensor"] = self.controller.tmLS
-        self.telemetrySignals["Magnetic Torquer"] = self.controller.tmMT
-        self.telemetrySignals["Payload"] = self.controller.tmPL
-        self.telemetrySignals["Power"] = self.controller.tmPW
-        self.telemetrySignals["Reaction Wheel"] = self.controller.tmRW
+        self.connected = False
 
         self.InitWindow()
+
 
     #initialize the entry window
     def InitWindow(self):
@@ -198,17 +476,16 @@ class MainWindow(QWidget):
         self.cmd_button.setFont(QtGui.QFont("Courier New", 20))
         #self.cmd_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.cmd_button.clicked.connect(self.openTelecommand)
+
+        #button which opens the telemetry window
+        self.tm_button = QPushButton("Telemetry")
+        self.tm_button.clicked.connect(self.openTelemetry)
         
         #layout of TMTC section
         self.vbox_TMTC = QVBoxLayout()
         self.vbox_TMTC.addWidget(self.cmd_button)
-
-        for topic in self.dataModel.telemetryWindows:
-            checkBox = QCheckBox(topic)
-            checkBox.setFont(QtGui.QFont("Courier New", 14))
-            checkBox.toggled.connect(lambda checked, _topic = topic: self.toggleTelemetry(checked, _topic)) #connect toggle behavior
-            self.telemetryCheckBoxes[topic] = checkBox #store widget into dictionary
-            self.vbox_TMTC.addWidget(checkBox) #add widget to layout
+        self.vbox_TMTC.addWidget(self.tm_button)
+       
 
         #---connection section---
         #label for connection status
@@ -265,11 +542,6 @@ class MainWindow(QWidget):
         self.imageHbox = QHBoxLayout()
         self.imageContainer.setLayout(self.imageHbox)
 
-        #test
-        self.testImage = QLabel("waiting for image...")
-        self.testImage.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.testImage.setFixedSize(600, 400)
-
         #add container to scroll area
         self.imageScrollArea.setWidget(self.imageContainer)
 
@@ -288,7 +560,7 @@ class MainWindow(QWidget):
         #frame2.setFrameShadow(QFrame.Shadow.Sunken)
         self.vbox.addWidget(frame2)
         self.vbox.addLayout(self.hbox)
-        self.vbox.addWidget(self.testImage)
+        self.vbox.addWidget(self.imageScrollArea)
         #self.vbox.addWidget(self.imageScrollArea)
         #self.vbox.addStretch(1)
 
@@ -298,57 +570,47 @@ class MainWindow(QWidget):
     #open the telecommand window
     def openTelecommand(self):
         self.cmd_window.show()
-        
 
-    #opens/closes the telemetry window for the topic AttitudeDetermination
-    def toggleTelemetry(self, checked, topic):
-        if checked:
-            if topic not in self.telemetryWindows:
-                telemetryWindow = TelemetryWindow(topic, self.onTelemetryWindowClosed)
-                self.telemetrySignals[topic].connect(telemetryWindow.updateTelemetry)
-                self.telemetryWindows[topic] = telemetryWindow
-            telemetryWindow.show()
-
-        else:
-            self.telemetryWindows[topic].close() #close the window            
-            del self.telemetryWindows[topic] #remove from the dictionary
-
-
-
-    def onTelemetryWindowClosed(self, topic):
-        self.telemetryCheckBoxes[topic].setChecked(False)
+    #open the telemetry window
+    def openTelemetry(self):
+        self.tm_window.show()
         
     def onConnectionButtonClicked(self):
-        try:
-            self.controller.run()
-            self.connection_label.setText("connected")
-            self.connection_label.setStyleSheet("background-color: green")
+        try:    
+            if not self.connected:
+                self.controller.start()
+                self.connection_label.setText("connected")
+                self.connection_label.setStyleSheet("background-color: green")
+                self.connected = True
+            
+            else:
+                self.controller.connectStm()
 
         except Exception as e:
             print(e)
     
     def addImage(self, qimage):
-        q_image = qimage.copy()
-        print("addImage...\n")
+        #self.q_image = QtGui.QImage("testImage")
+        #print("addImage...\n")
         #convert QImage to QPixmap
-        pixmap = QtGui.QPixmap.fromImage(q_image)
-        print("pixmap...\n")
+        pixmap = QtGui.QPixmap.fromImage(qimage)
+        #print("pixmap...\n")
 
         #test
-        self.testImage.setPixmap(pixmap)
+        #self.testImage.setPixmap(pixmap)
         #self.testImage.setScaledContents(True)
         #self.testImage.setFixedSize(600, 400)
 
         #create image label
-        #imageLabel = QLabel()
-        #imageLabel.setPixmap(pixmap)
-        #imageLabel.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        #imageLabel.setScaledContents(True) #scale to fit within label dimensions
-        #imageLabel.setFixedSize(600, 400)
+        imageLabel = QLabel()
+        imageLabel.setPixmap(pixmap)
+        imageLabel.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        imageLabel.setScaledContents(True) #scale to fit within label dimensions
+        imageLabel.setFixedSize(600, 400)
         
         #add image label to container
-        #self.imageHbox.addWidget(imageLabel)
-        print("image added...\n")
+        self.imageHbox.addWidget(imageLabel)
+        #print("image added...\n")
         
         
 
@@ -360,7 +622,7 @@ if __name__ == '__main__':
 
     #telemetryHandler = TelemetryHandler(window)
     
-    window.showMaximized()
+    window.show()
     
     sys.exit(app.exec())
 
