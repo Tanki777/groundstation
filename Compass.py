@@ -58,13 +58,13 @@ class CompassWidget(QWidget):
             'N': 0, 'NE': 45, 'E': 90, 'SE': 135,
             'S': 180, 'SW': -135, 'W': -90, 'NW': -45
         }
-        for direction, angle in directions.items():
-            angle_rad = radians(angle - 90)
-            label_radius = radius - 40
-            label_x = center.x() + label_radius * cos(angle_rad)
-            label_y = center.y() + label_radius * sin(angle_rad)
-            painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
-            painter.drawText(QPointF(label_x - 10, label_y + 5), direction)
+        #for direction, angle in directions.items():
+        #    angle_rad = radians(angle - 90)
+        #    label_radius = radius - 40
+        #    label_x = center.x() + label_radius * cos(angle_rad)
+        #    label_y = center.y() + label_radius * sin(angle_rad)
+        #    painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        #    painter.drawText(QPointF(label_x - 10, label_y + 5), direction)
 
         # Draw compass needle
         painter.setPen(Qt.GlobalColor.red)

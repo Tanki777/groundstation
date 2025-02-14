@@ -1,9 +1,10 @@
 import sys
 import struct
 import time
+import os
 from PyQt6 import QtGui, QtCore
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QPushButton, QTextBrowser, QLineEdit, QLabel
-                             , QCheckBox, QFrame, QSizePolicy, QPlainTextEdit, QScrollArea, QGridLayout)
+                             , QCheckBox, QFrame, QSizePolicy, QPlainTextEdit, QScrollArea, QGridLayout, QTextEdit)
 import pyqtgraph as pg
 import Model
 import Controller
@@ -11,6 +12,10 @@ import Compass
 import subprocess
 import faulthandler
 faulthandler.enable()
+
+app_icon_path = os.path.abspath("assets/chart.png")
+start_time = time.time()
+
 
 def getColorByIndex(index):
     if index == 0: return "r" #red
@@ -45,6 +50,9 @@ class TelecommandWindow(QWidget):
         self.tc_comboBox = QComboBox()
         #magically limits the max visible items to 10
         self.tc_comboBox.setStyleSheet("combobox-popup: 0;")
+        self.tc_comboBox.setEditable(True)
+        self.tc_comboBox.setInsertPolicy(self.tc_comboBox.InsertPolicy.NoInsert) #prevents adding new items
+        self.tc_comboBox.completer().setCompletionMode(self.tc_comboBox.completer().CompletionMode.PopupCompletion) #shows suggestions
 
         for tc in self.mainWindow.dataModel.telecommands:
             self.tc_comboBox.addItem("{} | {}".format(tc.word, tc.description))
@@ -93,6 +101,7 @@ class TelecommandWindow(QWidget):
 
         #telecommand feedback log
         self.tcFeedbackLog_textBrowser = QTextBrowser()
+        self.mainWindow.controller.tmTCFB.connect(self.updateTelecommandFeedback) #connect to signal from controller
 
         #container for telecommand feedback log label and text browser
         self.lowerRight_vbox = QVBoxLayout()
@@ -125,6 +134,12 @@ class TelecommandWindow(QWidget):
         #send telecommand to satellite
         telecommand = struct.pack("HQHd",sentTC.id,0,0,float(parameter))
         self.mainWindow.controller.telecommandTopic.publish(telecommand)
+
+    def updateTelecommandFeedback(self, data):
+        hour = time.localtime().tm_hour
+        min = time.localtime().tm_min
+        sec = time.localtime().tm_sec
+        self.tcFeedbackLog_textBrowser.append("{}:{}:{} {}".format(hour, min, sec, data))
 
 class TelemetryWindow(QWidget):
     #initialization. called when the object is created
@@ -162,7 +177,7 @@ class TelemetryWindow(QWidget):
         self.telemetrySignals["Power"] = self.mainWindow.controller.tmPW
         self.telemetrySignals["Reaction Wheel"] = self.mainWindow.controller.tmRW
         self.telemetrySignals["Error Messages"] = self.mainWindow.controller.tmERR
-        self.telemetrySignals["Debug"] = self.mainWindow.controller.tmDebug
+        #self.telemetrySignals["Debug"] = self.mainWindow.controller.tmDebug
 
         self.plotSignals = {}
         self.plotSignals["Attitude Control"] = self.mainWindow.controller.plotAC
@@ -173,9 +188,10 @@ class TelemetryWindow(QWidget):
         self.plotSignals["Payload"] = self.mainWindow.controller.plotPL
         self.plotSignals["Power"] = self.mainWindow.controller.plotPW
         self.plotSignals["Reaction Wheel"] = self.mainWindow.controller.plotRW
+        self.plotSignals["Error Messages"] = self.mainWindow.controller.plotPW
 
         self.setWindowTitle("Telemetry")
-        self.setGeometry(0,0,0,900)
+        self.setGeometry(0,0,1500,900)
 
         #selection section
         self.selection_hbox1 = QHBoxLayout()
@@ -261,15 +277,13 @@ class TelemetryWindow(QWidget):
             self.plotSignals[tm.topic].connect(graph_widget.updateData)
             tm_widget.graph_button.clicked.connect(graph_widget.onGraphClicked)
 
-            frame2 = QFrame()
-            frame2.setFrameShape(QFrame.Shape.HLine)
-            self.graph_frames[tm.topic] = frame2
+            
                 
             self.tm_scroll_vbox.addWidget(tm_widget)
             self.tm_scroll_vbox.addWidget(frame1)
 
             self.graph_scroll_vbox.addWidget(graph_widget)
-            self.graph_scroll_vbox.addWidget(frame2)
+            #self.graph_scroll_vbox.addWidget(frame2)
 
             
         else:
@@ -312,7 +326,32 @@ class TelemetryWidget(QWidget):
         vbox.addWidget(values_label)
 
         #button for graph
-        self.graph_button = QPushButton("graph")
+        self.graph_button = QPushButton()
+        self.graph_button.setFixedSize(40,40)
+        self.graph_button.setIcon(QtGui.QIcon("assets/chart.png"))
+        self.graph_button.setIconSize(QtCore.QSize(30,30))
+
+        self.nobutton = QPushButton()
+        self.nobutton.setStyleSheet("""
+            QPushButton {
+                border-image: url(assets/chart.png);
+                border-radius: 15px; /* Rounded corners */
+                background-color: #0078D7; /* Light blue background */
+                color: black; /* Text color */
+                font-size: 16px;
+                font-weight: bold;
+                padding: 10px;
+                border: 2px solid #005a9e; /* Border color */
+            }
+            QPushButton:hover {
+                background-color: #005a9e; /* Darker blue on hover */
+            }
+            QPushButton:pressed {
+                background-color: #003f7f; /* Even darker on press */
+            }
+        """)
+        
+        
         
         #TODO: add behavior
 
@@ -347,7 +386,12 @@ class GraphWidget(QWidget):
         #parent layout
         self.vbox = QVBoxLayout()
 
+        frame2 = QFrame()
+        frame2.setFrameShape(QFrame.Shape.HLine)
+        #self.graph_frames[tm.topic] = frame2
+
         topic_label = QLabel(self.topic)
+        self.vbox.addWidget(frame2)
         self.vbox.addWidget(topic_label)
 
         self.figureCount = 0
@@ -357,7 +401,8 @@ class GraphWidget(QWidget):
         #dictionary to store figures by title
         figure = {}
 
-        self.x_data = list(range(100))
+        self.x_data_inner = list(range(-100,0))
+        self.x_data_outer = []
         self.y_data_inner = [0] * 100
         self.y_data_outer = []
 
@@ -372,10 +417,11 @@ class GraphWidget(QWidget):
                     plot_item = plot_widget.plotItem
                     plot_widget.setFixedHeight(150)
 
+                    self.x_data_outer.append(self.x_data_inner.copy())
                     self.y_data_outer.append(self.y_data_inner.copy())
                     
                     plot_item.addLegend(offset=(1,1))
-                    plot_data_item = plot_item.plot(self.x_data, self.y_data_inner, pen=getColorByIndex(0),name=plot.legend)
+                    plot_data_item = plot_item.plot(self.x_data_inner, self.y_data_inner, pen=getColorByIndex(0),name=plot.legend)
                     plot_item.setTitle(plot.title)
                     #plot_item.setLabel("bottom","time [s]")
                     plot_item.setLabel("left",plot.y_label)
@@ -395,10 +441,11 @@ class GraphWidget(QWidget):
 
                 #if the figure for a topic is already created, add the plot to the existing figure
                 else:
-                    plot_data_item = figure[plot.title].plot(self.x_data, self.y_data_inner, pen=getColorByIndex(self.dataCount[self.figureCount-1]),name=plot.legend)
+                    plot_data_item = figure[plot.title].plot(self.x_data_inner, self.y_data_inner, pen=getColorByIndex(self.dataCount[self.figureCount-1]),name=plot.legend)
                     self.dataCount[self.figureCount - 1] = self.dataCount[self.figureCount - 1] + 1
                     self.plotDataItems.append(plot_data_item)
 
+                    self.x_data_outer.append(self.x_data_inner.copy())
                     self.y_data_outer.append(self.y_data_inner.copy())
 
         self.setLayout(self.vbox)
@@ -414,9 +461,6 @@ class GraphWidget(QWidget):
 
     def updateData(self, data):
         dataIndex = 0
-
-
-
         
         for i in range(self.vbox.count() - 1):
             #print("DEBUG: i {}".format(i))
@@ -425,13 +469,16 @@ class GraphWidget(QWidget):
 
             for k in range(self.dataCount[i]):
                 #print("DEBUG: k {}".format(k))
+                self.x_data_outer[dataIndex].pop(0)
+                self.x_data_outer[dataIndex].append(time.time() - start_time)
+
                 self.y_data_outer[dataIndex].pop(0)
                 #self.y_data.pop(0) #removes oldest value
                 #print("DEBUG: dataindex {}".format(dataIndex))
                 self.y_data_outer[dataIndex].append(data[dataIndex])
                 #self.y_data.append(data[dataIndex])
                 #print("DEBUG: yaw {}".format(data[4]))
-                self.plotDataItems[dataIndex].setData(self.x_data, self.y_data_outer[dataIndex])
+                self.plotDataItems[dataIndex].setData(self.x_data_outer[dataIndex], self.y_data_outer[dataIndex])
                 dataIndex = dataIndex + 1
                     
 
@@ -461,9 +508,8 @@ class MainWindow(QWidget):
         self.tm_window = TelemetryWindow(self)
         #self.tmAD_window = TelemetryWindow("Attitude Determination", self.onTelemetryWindowClosed)
 
-        
-
         self.connected = False
+        self.setWindowIcon(QtGui.QIcon(app_icon_path))
 
         self.InitWindow()
 
@@ -479,6 +525,7 @@ class MainWindow(QWidget):
 
         #button which opens the telemetry window
         self.tm_button = QPushButton("Telemetry")
+        self.tm_button.setFont(QtGui.QFont("Courier New", 20))
         self.tm_button.clicked.connect(self.openTelemetry)
         
         #layout of TMTC section
@@ -491,9 +538,10 @@ class MainWindow(QWidget):
         #label for connection status
         self.connection_label = QLabel("not connected")
         self.connection_label.setFont(QtGui.QFont("Courier New", 14))
-        #self.connection_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
-        self.connection_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.connection_label.setStyleSheet("background-color: red")
+        
+        #self.connection_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        #self.connection_label.setStyleSheet("background-color: red")
+        self.connection_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
 
         #button to connect to satellite
         connection_button = QPushButton("connect")
@@ -565,6 +613,18 @@ class MainWindow(QWidget):
         #self.vbox.addStretch(1)
 
         self.setLayout(self.vbox) #set total layout for the main window
+
+        #test
+        #img1 = QtGui.QImage("testImage10")
+        #self.addImage(img1)
+        #img2 = QtGui.QImage("testImage12")
+        #self.addImage(img2)
+        #img3 = QtGui.QImage("testImage13")
+        #self.addImage(img3)
+        #img4 = QtGui.QImage("testImage15")
+        #self.addImage(img4)
+        #img5 = QtGui.QImage("testImage19")
+        #self.addImage(img5)
         
 
     #open the telecommand window
@@ -580,26 +640,20 @@ class MainWindow(QWidget):
             if not self.connected:
                 self.controller.start()
                 self.connection_label.setText("connected")
-                self.connection_label.setStyleSheet("background-color: green")
+                #self.connection_label.setStyleSheet("background-color: green")
                 self.connected = True
             
             else:
-                self.controller.connectStm()
+                self.controller.reconnectStm()
 
         except Exception as e:
             print(e)
     
     def addImage(self, qimage):
-        #self.q_image = QtGui.QImage("testImage")
         #print("addImage...\n")
         #convert QImage to QPixmap
         pixmap = QtGui.QPixmap.fromImage(qimage)
         #print("pixmap...\n")
-
-        #test
-        #self.testImage.setPixmap(pixmap)
-        #self.testImage.setScaledContents(True)
-        #self.testImage.setFixedSize(600, 400)
 
         #create image label
         imageLabel = QLabel()
@@ -608,20 +662,34 @@ class MainWindow(QWidget):
         imageLabel.setScaledContents(True) #scale to fit within label dimensions
         imageLabel.setFixedSize(600, 400)
         
+        #create image description
+        descrLabel = QLabel("Object {}".format(self.imageHbox.count() + 1))
+        descrLabel.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+
+        #create vbox for image and description
+        vbox = QVBoxLayout()
+        vbox.addWidget(descrLabel)
+        vbox.addWidget(imageLabel)
+
         #add image label to container
-        self.imageHbox.addWidget(imageLabel)
+        #self.imageHbox.addWidget(imageLabel)
+        self.imageHbox.addLayout(vbox)
         #print("image added...\n")
         
         
 
 if __name__ == '__main__':
+
+    
     app = QApplication(sys.argv)
     app.setFont(QtGui.QFont("Courier New"))
+    app.setWindowIcon(QtGui.QIcon(app_icon_path))
 
     window = MainWindow()
+    #window.setWindowIcon(QtGui.QIcon(app_icon_path))
 
     #telemetryHandler = TelemetryHandler(window)
-    
+    print(app_icon_path)
     window.show()
     
     sys.exit(app.exec())

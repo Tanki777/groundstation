@@ -6,6 +6,8 @@ import time
 import math
 import Model
 from PIL import Image
+import numpy as np
+import cv2
 
 sys.path.insert(1,'rodos/support/support-programs/middleware-python')
 import rodosmwinterface as rodos
@@ -18,6 +20,8 @@ class Controller(QThread):
     def __init__(self):
         super().__init__()
 
+        self.dataModel = Model.DataModel()
+
     tmAC = pyqtSignal(str)
     tmAD = pyqtSignal(str)
     tmHeading = pyqtSignal(float)
@@ -28,6 +32,7 @@ class Controller(QThread):
     tmPW = pyqtSignal(str)
     tmRW = pyqtSignal(str)
     tmERR = pyqtSignal(str)
+    tmTCFB = pyqtSignal(str)
 
     plotAC = pyqtSignal(Model.PlotDataAC)
     plotAD = pyqtSignal(Model.PlotDataAD)
@@ -38,7 +43,7 @@ class Controller(QThread):
     plotPW = pyqtSignal(Model.PlotDataPW)
     plotRW = pyqtSignal(Model.PlotDataRW)
 
-    tmDebug = pyqtSignal(str)
+    #tmDebug = pyqtSignal(str)
 
     payloadData = pyqtSignal(QImage)
 
@@ -63,7 +68,7 @@ class Controller(QThread):
             #print("DEBUG: trying to handle AC_TM\n")
             #TIME TMPRD CTRPRD YAWREF YAWDOTREF YAWCURR YAWDOTCURR POS_CTRL_OUT POS_CTRL_P POS_CTRL_I POS_CTRL_D SPD_CTRL_OUT SPD_CTRL_P SPD_CTRL_I SPD_CTRL_D
             unpacked = struct.unpack("d?QQdddddddddddd", data)
-            message = "{}:{}:{} | {} | {} | {:.3f} | {:.3f}".format(self.getHour(unpacked[0]), self.getMin(unpacked[0]), self.getSec(unpacked[0]), unpacked[2], unpacked[3], unpacked[4], unpacked[5])
+            message = "{}:{}:{} | {} | {} | {:.3f} | {:.3f} | {:.1f} | {:.1f} | {:.1f} | {:.1f}".format(self.getHour(unpacked[0]), self.getMin(unpacked[0]), self.getSec(unpacked[0]), unpacked[2], unpacked[3], unpacked[4], unpacked[5], unpacked[12], unpacked[13], unpacked[14], unpacked[15])
             self.tmAC.emit(message)
 
             #target yaw, filtered yaw, target speed, filtered speed, POS_CTRL_OUT POS_CTRL_P POS_CTRL_I POS_CTRL_D SPD_CTRL_OUT SPD_CTRL_P SPD_CTRL_I SPD_CTRL_D
@@ -71,7 +76,7 @@ class Controller(QThread):
             self.plotAC.emit(plotData)
 
         except Exception as e:
-            #print("DEBUG: error!\n")
+            print("DEBUG: unpacking error AC!\n")
             print(e)
             print(data)
             print(len(data))
@@ -91,7 +96,7 @@ class Controller(QThread):
             self.plotAD.emit(plotData)
 
         except Exception as e:
-            #print("DebuG: error!\n")
+            print("DebuG: unpacking error AD!\n")
             print(e)
             print(data)
             print(len(data)) 
@@ -101,8 +106,8 @@ class Controller(QThread):
         try:
             #TIME | TMPRD | SNSPRD | AX | AY | AZ | GX | GY | GZ | MX | MY | MZ
             unpacked = struct.unpack("d?QQddddddddddd", data)
-            message = ("{}:{}:{} | {} | {} | {:.3f} | {:.3f} | {:.3f} | {:.3f} | {:.3f} | {:.3f} | {:.3f} | {:.3f} | {:.3f}"
-                           .format(self.getHour(unpacked[0]), self.getMin(unpacked[0]), self.getSec(unpacked[0]), unpacked[2], unpacked[3], unpacked[5], unpacked[6], unpacked[7], unpacked[8], unpacked[9]
+            message = ("{}:{}:{} | {} | {} | {:.3f} | {:.3f} | {:.3f} | {:.3f} | {:.3f} | {:.3f} | {:.3f} | {:.3f} | {:.3f} | {:.3f}"
+                           .format(self.getHour(unpacked[0]), self.getMin(unpacked[0]), self.getSec(unpacked[0]), unpacked[2], unpacked[3], unpacked[4],unpacked[5], unpacked[6], unpacked[7], unpacked[8], unpacked[9]
                                    , unpacked[10], unpacked[11], unpacked[12], unpacked[13]))
             self.tmIMU.emit(message)
 
@@ -111,7 +116,7 @@ class Controller(QThread):
             self.plotIMU.emit(plotData)
 
         except Exception as e:
-            #print("DEBUG: error!\n")
+            print("DEBUG: unpacking error IMU!\n")
             print(e)
             print(data)
             print(len(data))
@@ -122,15 +127,15 @@ class Controller(QThread):
             #TIME TMPRD SNSPRD LUX
             unpacked = struct.unpack("d?QQdd", data) #TODO: adjust, waiting for stm code
             message = ("{}:{}:{} | {} | {} | {:.3f}"
-                           .format(self.getHour(unpacked[0]), self.getMin(unpacked[0]), self.getSec(unpacked[0]), unpacked[2], unpacked[3], unpacked[4]))
+                           .format(self.getHour(unpacked[0]), self.getMin(unpacked[0]), self.getSec(unpacked[0]), unpacked[2], unpacked[3], unpacked[5]))
             self.tmLS.emit(message)
 
             #LUX
-            plotData = Model.PlotDataLS(unpacked[4])
-            self.plotLS.emit(plotData)
+            plotData = Model.PlotDataLS(unpacked[5])
+            #self.plotLS.emit(plotData)
 
         except Exception as e:
-            print("DEBUG: error!\n")
+            print("DEBUG: unpacking error LS!\n")
             print(e)
             print(data)
             print(len(data))
@@ -139,25 +144,42 @@ class Controller(QThread):
     def topicHandlerMT_TM(self, data):
         try:
             #TIME TMPRD IREF TRQNR PWM
-            unpacked = struct.unpack("d?Qddd", data)
-            message = ("{}:{}:{} | {} | {:.3f} | {:.0f}"
-                           .format(self.getHour(unpacked[0]), self.getMin(unpacked[0]), self.getSec(unpacked[0]), unpacked[2], unpacked[3]), unpacked[4])
+            unpacked = struct.unpack("d?Qddddd", data)
+            message = ("{}:{}:{} | {} | {:.3f} | {:.1f} | {:.1f} | {:.3f} | {:.3f} |"
+                       .format(self.getHour(unpacked[0]), self.getMin(unpacked[0]), self.getSec(unpacked[0]), unpacked[2], unpacked[3], unpacked[4], unpacked[5], unpacked[6], unpacked[7]))
             self.tmMT.emit(message)
 
             #TRQNR PWM
-            plotData = Model.PlotDataMT()
-            if unpacked[4] == 1:
+            plotData = Model.PlotDataMT(0,0)
+            if unpacked[4] == 1: #torquer 1
                 plotData.pwm_torquer1 = unpacked[5]
                 plotData.pwm_torquer2 = 0
 
-            elif unpacked[4] == 2:
+            elif unpacked[4] == 2: #torquer 2
                 plotData.pwm_torquer1 = 0
                 plotData.pwm_torquer2 = unpacked[5]
+
+            elif unpacked[4] == 121: #both torquers, quadrant 1
+                plotData.pwm_torquer1 = 1000
+                plotData.pwm_torquer2 = 1000
+
+            elif unpacked[4] == 122: #both torquers, quadrant 2
+                plotData.pwm_torquer1 = 1000
+                plotData.pwm_torquer2 = -1000
+
+            elif unpacked[4] == 123: #both torquers, quadrant 3
+                plotData.pwm_torquer1 = -1000
+                plotData.pwm_torquer2 = -1000
+
+            elif unpacked[4] == 124: #both torquers, quadrant 4
+                plotData.pwm_torquer1 = -1000
+                plotData.pwm_torquer2 = 1000
+                
 
             self.plotMT.emit(plotData)
             
         except Exception as e:
-            print("DEBUG: error!\n")
+            print("DEBUG: unpacking error MT!\n")
             print(e)
             print(data)
             print(len(data))
@@ -172,7 +194,7 @@ class Controller(QThread):
             self.tmPL.emit(message)
             
         except Exception as e:
-            print("DEBUG: error!\n")
+            print("DEBUG: unpacking error PL!\n")
             print(e)
             print(data)
             print(len(data))
@@ -182,7 +204,7 @@ class Controller(QThread):
         try:
             #TIME TMPRD SNSPRD BATV BATI BATPCT SPLV SPLI SPRV SPRI
             unpacked = struct.unpack("d?QQdddddddd", data)
-            message = ("{}:{}:{} | {} | {} | {:.0f} | {:.3f} | {:.3f} | {:.3f} | {:.3f} | {:.3f} | {:.3f}"
+            message = ("{}:{}:{} | {} | {} | {:.1f} | {:.3f} | {:.3f} | {:.3f} | {:.3f} | {:.3f} | {:.3f}"
                            .format(self.getHour(unpacked[0]), self.getMin(unpacked[0]), self.getSec(unpacked[0]), unpacked[2], unpacked[3], unpacked[5], unpacked[6], unpacked[7]
                                    ,unpacked[8], unpacked[9], unpacked[10], unpacked[11]))
             self.tmPW.emit(message)
@@ -226,19 +248,41 @@ class Controller(QThread):
             print(data)
             print(len(data))
 
-    #handler for Debug
-    def topicHandlerDebug(self, data):
+    #handler for Telecommand Feedback
+    def topicHandlerTC_FB(self, data):
+        print("bub\n")
         try:
-            unpacked = struct.unpack("dddddd", data)
-            message = ("{}:{}:{} | VT={:.2f} | w_measured={:.3f} | err={:.3f} | err_i={:.3f} | err_d={:.3f}"
-                           .format(self.getHour(unpacked[0]), self.getMin(unpacked[0]), self.getSec(unpacked[0]), unpacked[1],unpacked[2],unpacked[3],unpacked[4],unpacked[5],))
-            self.tmDebug.emit(message)
+            unpacked = struct.unpack("HQHd", data)
+            cmdWordStr = ""
+
+            #command word from hex to string
+            for tc in self.dataModel.telecommands:
+                if tc.id == unpacked[0]:
+                    cmdWordStr = tc.word
+
+            message = ("| {} | {}"
+                           .format(cmdWordStr, unpacked[3]))
+            self.tmTCFB.emit(message)
             
         except Exception as e:
-            print("DEBUG: unpacking error ERR!\n")
+            print("DEBUG: unpacking error TC_FB!\n")
             print(e)
             print(data)
             print(len(data))
+
+    #handler for Debug
+    #def topicHandlerDebug(self, data):
+    #    try:
+    #        unpacked = struct.unpack("dddddd", data)
+    #        message = ("{}:{}:{} | VT={:.2f} | w_measured={:.3f} | err={:.3f} | err_i={:.3f} | err_d={:.3f}"
+    #                       .format(self.getHour(unpacked[0]), self.getMin(unpacked[0]), self.getSec(unpacked[0]), unpacked[1],unpacked[2],unpacked[3],unpacked[4],unpacked[5],))
+    #        self.tmDebug.emit(message)
+    #        
+    #    except Exception as e:
+    #        print("DEBUG: unpacking error ERR!\n")
+    #        print(e)
+    #        print(data)
+    #        print(len(data))
 
     
     def connectStm(self):
@@ -255,8 +299,9 @@ class Controller(QThread):
         self.pwTopic = rodos.Topic(3007) #Power
         self.rwTopic = rodos.Topic(3008) #ReactionWheel
         self.errTopic = rodos.Topic(4000) #ErrorMessage
+        self.tcFbTopic = rodos.Topic(3200) #Telecommand Feedback
 
-        self.debugTopic = rodos.Topic(8000)
+        #self.debugTopic = rodos.Topic(8000)
         #thTopic = rodos.Topic(3009) #Thermal ditched
 
         #bluetooth connection to stm board
@@ -273,24 +318,31 @@ class Controller(QThread):
         self.pwTopic.addSubscriber(self.topicHandlerPW_TM)
         self.rwTopic.addSubscriber(self.topicHandlerRW_TM)
         self.errTopic.addSubscriber(self.topicHandlerERR_TM)
+        self.tcFbTopic.addSubscriber(self.topicHandlerTC_FB)
 
-        self.debugTopic.addSubscriber(self.topicHandlerDebug)
+        #self.debugTopic.addSubscriber(self.topicHandlerDebug)
         self.gwUart.forwardTopic(self.telecommandTopic)
         print("DEBUG: connected!\n")
 
     def reconnectStm(self):
         print("DEBUG: reconnect\n")
+        del self.luart
+        del self.gwUart
+        del self.telecommandTopic
+
+        self.telecommandTopic = rodos.Topic(2000)
         #bluetooth connection to stm board
-        #self.luart = rodos.LinkinterfaceUART(path="/dev/rfcomm0")
-        #self.gwUart = rodos.Gateway(self.luart)
-        #self.gwUart.run()
+        self.luart = rodos.LinkinterfaceUART(path="/dev/rfcomm0")
+        self.gwUart = rodos.Gateway(self.luart)
+        self.gwUart.run()
+        self.gwUart.forwardTopic(self.telecommandTopic)
 
     def connectPi(self):
-        host = "192.168.4.1" #TODO: adjust
-        port = 5000 #TODO: adjust
+        host = "0.0.0.0" #TODO: adjust
+        port = 5005 #TODO: adjust
         
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-            client_socket.connect((host, port))
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client_socket:
+            client_socket.bind((host, port))
             #server_socket.listen(1)
             print(f"Listening for connections on {host}:{port}...")
 
@@ -303,28 +355,39 @@ class Controller(QThread):
                 i = i + 1
                 try:
                     # Receive the image size (4 bytes)
-                    size_data = client_socket.recv(4)
-                    if not size_data:
-                        break
+                    #size_data = client_socket.recv(4)
+                    #if not size_data:
+                    #    break
 
                     # Convert size_data to integer
-                    img_size = struct.unpack('<L', size_data)[0]
+                    #img_size = struct.unpack('<L', size_data)[0]
 
                     # Receive the image data
-                    img_data = b''
-                    while len(img_data) < img_size:
-                        packet = client_socket.recv(img_size - len(img_data))
-                        if not packet:
-                            break
-                        img_data += packet
+                    #img_data = b''
+                    img_data, _ = client_socket.recvfrom(65535)
+                    frame = np.frombuffer(img_data, dtype=np.uint8)
+                    cvimg = cv2.imdecode(frame, cv2.IMREAD_COLOR_RGB)
+                    height, width, channels = cvimg.shape
+
+                    if channels == 3:
+                        self.qimage = QImage(cvimg.data, width, height, width*channels, QImage.Format.Format_RGB888)
+
+                    else:
+                        print("img error\n")
+
+                    #while len(img_data) < img_size:
+                    #    packet = client_socket.recv(img_size - len(img_data))
+                    #    if not packet:
+                    #        break
+                    #    img_data += packet
 
                     # Convert the image data to QImage
                     print("converting...\n")
-                    image = Image.open(io.BytesIO(img_data))
+                    #image = Image.open(io.BytesIO(img_data))
                     print("image...\n")
-                    qimage = QImage(image.tobytes(), image.width, image.height, QImage.Format.Format_RGB888)
+                    #qimage = QImage(image.tobytes(), image.width, image.height, QImage.Format.Format_RGB888)
                     print("QImage...\n")
-                    self.payloadData.emit(qimage)
+                    self.payloadData.emit(self.qimage)
 
                     #qimage.save("testImage{}".format(i),"JPEG")
 
@@ -347,8 +410,8 @@ class Controller(QThread):
         self.connectStm()
         
         #wifi connection to raspberry
-        #self.running = True
-        #self.connectPi()
+        self.running = True
+        self.connectPi()
 
 
   

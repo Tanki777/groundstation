@@ -122,7 +122,7 @@ class DataModel():
             Telecommand("AC_YAWXXXX", 0x1003, "set desired yaw angle [deg]"),
             Telecommand("AC_YAWSPDX", 0x1004, "set desired yaw angular speed [deg/s]"),
             Telecommand("AC_CTRLPRD", 0x1005, "set period of the attitude controller [ms]"),
-            Telecommand("AC_MODEXXX", 0x1006, "set control mode (RW = 0, RWMT = 1, MT = 2)"),
+            Telecommand("AC_MODEXXX", 0x1006, "set control mode (RW = 0, MT = 2, CTRLPOS = 3, CTRLSPD = 4, ENB_DESAT = 5, DIS_DESAT = 6)"),
 
             #---Attitude Determination---#
             Telecommand("AD_APP_ONX", 0x2000, "turn on application attitude determination"),
@@ -181,16 +181,16 @@ class DataModel():
             ]
 
         self.telemetry = [
-            Telemetry("Attitude Control","  TIME  TMPRD CTRPRD  YAWREF  YAWSPDREF"),
+            Telemetry("Attitude Control","  TIME  TMPRD CTRPRD  YAWREF  YAWSPDREF SC_OUT SC_P  SC_I  SC_D"),
             Telemetry("Attitude Determination","  TIME    TMPRD   ROLL    PITCH      YAW"),
-            Telemetry("IMU","  TIME  TMPRD SNSPRD     AX      AY      AZ      GX       GY      GZ       MX      MY      MZ"),
-            Telemetry("Light Sensor","  TIME  TMPRD SNSPRD"),
-            Telemetry("Magnetic Torquer","  TIME  TMPRD IREF  TRQNR"),
+            Telemetry("IMU","  TIME  TMPRD SNSPRD   SNSTIM       AX      AY      AZ      GX       GY      GZ       MX      MY      MZ"),
+            Telemetry("Light Sensor","  TIME  TMPRD SNSPRD  LUX"),
+            Telemetry("Magnetic Torquer","  TIME  TMPRD IREF  TRQNR  PWM   TIMEON   TIMEOFF"),
             Telemetry("Payload","  TIME  TMPRD"),
             Telemetry("Power","  TIME   TMPRD  SNSPRD  BATV    BATI   BATPCT   SPLV   SPLI    SPRV   SPRI"),
             Telemetry("Reaction Wheel","  TIME  TMPRD SNSPRD   SPD     SPDREF"),
-            Telemetry("Error Messages",""),
-            Telemetry("Debug","")
+            Telemetry("Error Messages","")
+            #Telemetry("Debug","")
         ]
 
         self.plots = [
@@ -226,7 +226,7 @@ class DataModel():
             Plot("IMU","Magnetometer","[gauss]","y"),
             Plot("IMU","Magnetometer","[gauss]","z"),
 
-            Plot("Light Sensor","Lux","","measured"),
+            Plot("Light Sensor","Lux","Lux","measured"),
 
             Plot("Magnetic Torquer","Torquer Actuation","PWM","torquer1"),
             Plot("Magnetic Torquer","Torquer Actuation","PWM","torquer2"),
